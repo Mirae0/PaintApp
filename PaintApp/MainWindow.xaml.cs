@@ -189,7 +189,6 @@ namespace PaintApp
 
             if (previewShape != null)
             {
-                // Rysujemy finalny kształt do bitmapy
                 Point end = e.GetPosition(DrawingCanvas);
                 DrawFinalShape(currentShape, shapeStart, end);
 
@@ -287,7 +286,6 @@ namespace PaintApp
 
         private void DrawLine(Point from, Point to)
         {
-            // prosty rysunek linii między punktami
             var dx = to.X - from.X;
             var dy = to.Y - from.Y;
             int steps = (int)Math.Max(Math.Abs(dx), Math.Abs(dy));
@@ -461,7 +459,7 @@ namespace PaintApp
         }
         private void Save_Click(object sender, RoutedEventArgs e)
         {
-            SaveAsPng_Click(sender, e); // Example: Redirect to SaveAsPng_Click or implement your save logic here
+            SaveAsPng_Click(sender, e); 
         }
         private void Open_Click(object sender, RoutedEventArgs e)
         {
