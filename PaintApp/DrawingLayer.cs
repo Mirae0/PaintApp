@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Media3D;
 
 namespace PaintApp
 {
@@ -16,6 +17,7 @@ namespace PaintApp
         public Image ImageControl { get; set; }  // do wyświetlenia w UI
         public string Name { get; set; }
         public bool IsVisible { get; set; } = true;
+        public double Opacity { get; set; }
 
         public DrawingLayer(int width, int height)
         {
@@ -26,6 +28,20 @@ namespace PaintApp
                 Width = width,
                 Height = height
             };
+        }
+
+        public DrawingLayer(DrawingLayer layer)
+        {
+            Bitmap = layer.Bitmap.Clone();
+
+            ImageControl = new Image
+            {
+                Source = layer.ImageControl.Source.Clone(),
+                Width = layer.ImageControl.Width,
+                Height = layer.ImageControl.Height
+            };
+            Name = layer.Name;
+            IsVisible = layer.IsVisible;
         }
     }
 }

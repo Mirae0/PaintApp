@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Reflection.Emit;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
@@ -67,11 +68,9 @@ namespace PaintApp
         }
 
 
-
-
-
         private void AddLayer_Click(object sender, RoutedEventArgs e)
         {
+            ContextMenu contextMenu = (ContextMenu)Resources["LayerMenu"];
             var layer = new DrawingLayer(canvasWidth, canvasHeight)
             {
                 Name = $"Warstwa {Layers.Count + 1}"
@@ -87,7 +86,11 @@ namespace PaintApp
         private void LayerList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (LayerList.SelectedItem is DrawingLayer selected)
+            {
                 ActiveLayer = selected;
+                OpacitySlider.Value = selected.ImageControl.Opacity;
+            }
+                
         }
 
         
@@ -119,24 +122,61 @@ namespace PaintApp
             var item = (sender as ListBox)?.SelectedItem as DrawingLayer;
             if (item != null)
             {
-                if (MessageBox.Show($"Czy na pewno chcesz usunąć warstwę '{item.Name}'?", "Usuń warstwę",
+                ContextMenu cm = this.FindResource("LayerMenu") as ContextMenu;
+                cm.PlacementTarget = sender as Button;
+                cm.IsOpen = true;
+                ActiveLayer = item;
+               
+            }   
+        }
+
+        private void RemoveLayer_Click(object sender, RoutedEventArgs e)
+        {
+            var item = ActiveLayer as DrawingLayer;
+            if (MessageBox.Show($"Czy na pewno chcesz usunąć warstwę '{item.Name}'?", "Usuń warstwę",
                                     MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
                 {
                     DrawingCanvas.Children.Remove(item.ImageControl);
                     Layers.Remove(item);
                     ActiveLayer = null;
                 }
+
+        }
+
+        private void DuplicateLayer_Click(Object sender, RoutedEventArgs e)
+        {
+            var item = ActiveLayer as DrawingLayer;
+            if (item != null)
+            {
+                var itemCopy = new DrawingLayer(item);
+                itemCopy.Name += "-Copy";
+                Layers.Insert(0, itemCopy);
+                DrawingCanvas.Children.Insert(0, itemCopy.ImageControl);
+                LayerList.SelectedItem = itemCopy;
             }
+
+        }
+
+        private void ShowHideLayer_Click(Object sender, RoutedEventArgs e)
+        {
+            var item = ActiveLayer as DrawingLayer;
+            if(item!=null){ item.IsVisible = !item.IsVisible; }
+            RedrawCanvas();
         }
 
 
-        
         private void RedrawCanvas()
         {
             DrawingCanvas.Children.Clear();
             foreach (var layer in Layers)
-                DrawingCanvas.Children.Add(layer.ImageControl);
-        }
+            {
+                if (layer.IsVisible)
+                {
+                    DrawingCanvas.Children.Add(layer.ImageControl);
+                }
+               
+            }
+            }
 
         private void Canvas_MouseDown(object sender, MouseButtonEventArgs e)
         {
@@ -167,15 +207,17 @@ namespace PaintApp
         {
             if (ActiveLayer == null) return;
             Point current = e.GetPosition(DrawingCanvas);
-
-            if (currentShape != ShapeType.None && previewShape != null)
+            if (ActiveLayer.IsVisible)
             {
-                UpdatePreviewShape(previewShape, shapeStart, current);
-            }
-            else if (isDrawing && lastPoint.HasValue)
-            {
-                DrawLine(lastPoint.Value, current);
-                lastPoint = current;
+                if (currentShape != ShapeType.None && previewShape != null)
+                {
+                    UpdatePreviewShape(previewShape, shapeStart, current);
+                }
+                else if (isDrawing && lastPoint.HasValue)
+                {
+                    DrawLine(lastPoint.Value, current);
+                    lastPoint = current;
+                }
             }
         }
 
@@ -297,6 +339,7 @@ namespace PaintApp
                 DrawPoint(new Point(x, y));
             }
         }
+
         private void ColorPicker_SelectedColorChanged(object sender, RoutedPropertyChangedEventArgs<Color?> e)
         {
             if (e.NewValue.HasValue)
@@ -306,6 +349,17 @@ namespace PaintApp
         {
             brushSize = (int)e.NewValue;
         }
+
+        private void OpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if(ActiveLayer != null)
+            {
+                ActiveLayer.ImageControl.Opacity = (double)e.NewValue;
+                RedrawCanvas();
+            }
+            
+        }
+
         private void ZoomCanvas_MouseWheel(object sender, MouseWheelEventArgs e)
         {
             double scale = e.Delta > 0 ? 1.1 : 0.9;
@@ -457,6 +511,14 @@ namespace PaintApp
             var rect = new Int32Rect(x, y, 1, 1);
             wb.WritePixels(rect, colorData, 4, 0);
         }
+
+
+        private void NewFile_Click(object sender, EventArgs e)
+        {
+            String message = "Określ rozmiary płótna w nowym pliku";
+            
+        }
+
         private void Save_Click(object sender, RoutedEventArgs e)
         {
             SaveAsPng_Click(sender, e); 
