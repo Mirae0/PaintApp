@@ -13,6 +13,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 using Microsoft.Win32;
+using Xceed.Wpf.Toolkit.PropertyGrid.Attributes;
 
 namespace PaintApp
 {
@@ -116,7 +117,7 @@ namespace PaintApp
             }
         }
 
-        // Usuwanie warstwy
+       // Otwieranie menu kontekstowego dla warstwy
         private void LayerList_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
         {
             var item = (sender as ListBox)?.SelectedItem as DrawingLayer;
@@ -129,7 +130,7 @@ namespace PaintApp
                
             }   
         }
-
+        // Usuwanie warstwy
         private void RemoveLayer_Click(object sender, RoutedEventArgs e)
         {
             var item = ActiveLayer as DrawingLayer;
@@ -143,6 +144,7 @@ namespace PaintApp
 
         }
 
+        //Duplikowanie warstwy
         private void DuplicateLayer_Click(Object sender, RoutedEventArgs e)
         {
             var item = ActiveLayer as DrawingLayer;
@@ -157,6 +159,7 @@ namespace PaintApp
 
         }
 
+        //Ukryj / Pokaż warstwę
         private void ShowHideLayer_Click(Object sender, RoutedEventArgs e)
         {
             var item = ActiveLayer as DrawingLayer;
@@ -515,8 +518,12 @@ namespace PaintApp
 
         private void NewFile_Click(object sender, EventArgs e)
         {
-            String message = "Określ rozmiary płótna w nowym pliku";
-            
+            foreach(var layer in Layers.ToList())
+            {
+                DrawingCanvas.Children.Remove(layer.ImageControl);
+                Layers.Remove(layer);
+            }
+            AddLayer_Click(null, null);
         }
 
         private void Save_Click(object sender, RoutedEventArgs e)

@@ -51,6 +51,7 @@
                              Height="300" Margin="0,10"/>
                     <Button Content="Pióro" Click="SetToolToPen" Margin="0,5"/>
                     <Button Content="Gumka" Click="SetToolToEraser" Margin="0,5"/>
+                    <Label Content="Brush Size:"/>
                     <Slider x:Name="BrushSize" Minimum="1" Maximum="50" Value="1" 
                             ValueChanged="BrushSizeSlider_ValueChanged"
                             Width="150" Margin="0,5"/>
