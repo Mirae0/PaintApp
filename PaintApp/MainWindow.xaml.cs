@@ -61,11 +61,13 @@ namespace PaintApp
         private void SetToolToPen(object sender, RoutedEventArgs e)
         {
             currentTool = ToolType.Pen;
+            currentShape = ShapeType.None;
         }
 
         private void SetToolToEraser(object sender, RoutedEventArgs e)
         {
             currentTool = ToolType.Eraser;
+            currentShape = ShapeType.None;
         }
 
 
@@ -516,6 +518,7 @@ namespace PaintApp
         }
 
 
+        //Usuwanie wszystkich warstw, tworzenie jednej nowej
         private void NewFile_Click(object sender, EventArgs e)
         {
             foreach(var layer in Layers.ToList())
