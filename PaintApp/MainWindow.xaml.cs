@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.ObjectModel;
 using System.IO;
-using System.Reflection.Emit;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
@@ -14,6 +13,10 @@ using System.Windows.Navigation;
 using System.Windows.Shapes;
 using Microsoft.Win32;
 using Xceed.Wpf.Toolkit.PropertyGrid.Attributes;
+using System.Windows.Input.StylusPlugIns;
+using Xceed.Wpf.Themes.FluentDesign.Common;
+using System.DirectoryServices;
+
 
 namespace PaintApp
 {
@@ -27,7 +30,28 @@ namespace PaintApp
             InitializeComponent();
             LayerList.ItemsSource = Layers;
             AddLayer_Click(null, null);
+            DrawingCanvas.StylusDown += DrawingCanvas_StylusDown;
+            DrawingCanvas.StylusMove += DrawingCanvas_StylusMove;
+            DrawingCanvas.StylusUp += DrawingCanvas_StylusUp;
+            UndoCommand = new RelayCommand(_ => Undo_Click(null, null), _ => CanUndo());
+            RedoCommand = new RelayCommand(_ => Redo_Click(null, null), _ => CanRedo());
+
+            this.DataContext = this;
+            this.InputBindings.Add(new KeyBinding(RedoCommand, Key.Y, ModifierKeys.Control));
+
+
+
         }
+        public MainWindow(int canvasWidth, int canvasHeight, string theme) : this()
+        {
+            DrawingCanvas.Width = canvasWidth;
+            DrawingCanvas.Height = canvasHeight;
+            SetTheme(theme);
+
+
+        }
+
+
         ObservableCollection<DrawingLayer> Layers = new ObservableCollection<DrawingLayer>();
         DrawingLayer? ActiveLayer = null;
 
@@ -48,26 +72,150 @@ namespace PaintApp
         private Point shapeStart;
         private Rect? selectionRect = null;
         private WriteableBitmap? selectionData = null;
+        public ICommand UndoCommand { get; set; }
+        public ICommand RedoCommand { get; set; }
+        private enum InputMode { None, Mouse, Stylus }
+        private InputMode currentMode = InputMode.None;
 
 
 
-        private void Tool_Line_Click(object sender, RoutedEventArgs e) => currentShape = ShapeType.Line;
-        private void Tool_Rectangle_Click(object sender, RoutedEventArgs e) => currentShape = ShapeType.Rectangle;
-        private void Tool_Ellipse_Click(object sender, RoutedEventArgs e) => currentShape = ShapeType.Ellipse;
 
 
 
+        private bool CanUndo() => ActiveLayer != null && ActiveLayer.CanUndo();
+        private bool CanRedo() => ActiveLayer != null && ActiveLayer.CanRedo();
+        private Stack<LayerAction> undoLayerStack = new Stack<LayerAction>();
+        private Stack<LayerAction> redoLayerStack = new Stack<LayerAction>();
+        private bool isFillModeEnabled = false;
+
+
+
+
+        private void Tool_Line_Click(object sender, RoutedEventArgs e)
+        {
+            currentShape = ShapeType.Line;
+            Cursor = Cursors.Pen; 
+        }
+        private void Tool_Rectangle_Click(object sender, RoutedEventArgs e)
+        {
+            currentShape = ShapeType.Rectangle;
+            Cursor = Cursors.Pen;
+
+        } 
+        private void Tool_Ellipse_Click(object sender, RoutedEventArgs e) 
+        {
+            currentShape = ShapeType.Ellipse;
+            Cursor = Cursors.Pen;
+        }
 
         private void SetToolToPen(object sender, RoutedEventArgs e)
         {
             currentTool = ToolType.Pen;
             currentShape = ShapeType.None;
+            Cursor = Cursors.Pen; 
         }
 
         private void SetToolToEraser(object sender, RoutedEventArgs e)
         {
             currentTool = ToolType.Eraser;
             currentShape = ShapeType.None;
+            Cursor = Cursors.Cross; 
+        }
+        //ciemny jasny motyw
+        private void SetTheme(string theme)
+        {
+            Brush bg, fg;
+
+            if (theme == "Dark")
+            {
+                bg = (Brush)new BrushConverter().ConvertFrom("#222222");
+                fg = Brushes.White;
+
+                Resources["WindowBackgroundBrush"] = bg;
+                Resources["BackgroundBrush"] = bg;
+                Resources["WindowForegroundBrush"] = fg;
+                Resources["ButtonBackgroundBrush"] = bg;
+                Resources["ButtonForegroundBrush"] = fg;
+                Resources["LabelForegroundBrush"] = fg;
+                Resources["MenuBackgroundBrush"] = bg;
+                Resources["MenuForegroundBrush"] = fg;
+                Resources["ColorPickerBackgroundBrush"] = bg;
+                Resources["ColorPickerForegroundBrush"] = fg;
+                Resources["ContextMenuBackground"] = bg;
+                Resources["ContextMenuForeground"] = fg;
+          
+            }
+            else
+            {
+                bg = Brushes.White;
+                fg = Brushes.Black;
+
+                Resources["WindowBackgroundBrush"] = bg;
+                Resources["BackgroundBrush"] = bg;
+                Resources["WindowForegroundBrush"] = fg;
+                Resources["ButtonBackgroundBrush"] = bg;
+                Resources["ButtonForegroundBrush"] = fg;
+                Resources["LabelForegroundBrush"] = fg;
+                Resources["MenuBackgroundBrush"] = bg;
+                Resources["MenuForegroundBrush"] = fg;
+                Resources["ColorPickerBackgroundBrush"] = bg;
+                Resources["ColorPickerForegroundBrush"] = fg;
+                Resources["ContextMenuBackground"] = bg;
+                Resources["ContextMenuForeground"] = fg;
+             
+            }
+
+            this.Background = bg;
+            ApplyThemeRecursively(this, bg, fg);
+        }
+
+        private void ApplyThemeRecursively(DependencyObject parent, Brush bg, Brush fg)
+        {
+            int count = VisualTreeHelper.GetChildrenCount(parent);
+
+            for (int i = 0; i < count; i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+
+                switch (child)
+                {
+                    case TextBlock tb:
+                        tb.Foreground = fg;
+                        break;
+                    case Label lbl:
+                        lbl.Foreground = fg;
+                        lbl.Background = bg;
+                        break;
+                    case TextBox tbx:
+                        tbx.Foreground = fg;
+                        tbx.Background = Brushes.White;
+                        break;
+                    case RadioButton rb:
+                        rb.Foreground = fg;
+                        rb.Background = bg;
+                        break;
+                    case Slider slider:
+                        slider.Foreground = fg;
+                        slider.Background = Brushes.Transparent;
+                        break;
+                    case ListBoxItem lbi:
+                        lbi.Foreground = fg;
+                        lbi.Background = bg;
+                        break;
+                    case ScrollViewer sv:
+                        sv.Background = bg;
+                        break;
+                    case Panel panel:
+                        panel.Background = bg;
+                        break;
+                    case Control ctrl:
+                        ctrl.Foreground = fg;
+                        ctrl.Background = bg;
+                        break;
+                }
+
+                ApplyThemeRecursively(child, bg, fg); // rekurencja
+            }
         }
 
 
@@ -81,6 +229,15 @@ namespace PaintApp
             Layers.Insert(0, layer);
             DrawingCanvas.Children.Insert(0, layer.ImageControl);
             LayerList.SelectedItem = layer;
+            //aktualizacja o cofanie i ponow
+            ActiveLayer = layer;
+            undoLayerStack.Push(new LayerAction
+            {
+                Type = LayerAction.ActionType.Add,
+                Layer = layer,
+                Index = 0
+            });
+            redoLayerStack.Clear();
         }
 
 
@@ -93,10 +250,10 @@ namespace PaintApp
                 ActiveLayer = selected;
                 OpacitySlider.Value = selected.ImageControl.Opacity;
             }
-                
+
         }
 
-        
+
         private void MoveLayerUp_Click(object sender, RoutedEventArgs e)
         {
             if (ActiveLayer == null) return;
@@ -105,6 +262,8 @@ namespace PaintApp
             {
                 Layers.Move(index, index - 1);
                 RedrawCanvas();
+                undoLayerStack.Push(new LayerAction { Type = LayerAction.ActionType.MoveUp, Layer = ActiveLayer, Index = index });
+                redoLayerStack.Clear();
             }
         }
 
@@ -116,10 +275,12 @@ namespace PaintApp
             {
                 Layers.Move(index, index + 1);
                 RedrawCanvas();
+                undoLayerStack.Push(new LayerAction { Type = LayerAction.ActionType.MoveDown, Layer = ActiveLayer, Index = index });
+                redoLayerStack.Clear();
             }
         }
 
-       // Otwieranie menu kontekstowego dla warstwy
+        // Otwieranie menu kontekstowego dla warstwy
         private void LayerList_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
         {
             var item = (sender as ListBox)?.SelectedItem as DrawingLayer;
@@ -129,8 +290,8 @@ namespace PaintApp
                 cm.PlacementTarget = sender as Button;
                 cm.IsOpen = true;
                 ActiveLayer = item;
-               
-            }   
+
+            }
         }
         // Usuwanie warstwy
         private void RemoveLayer_Click(object sender, RoutedEventArgs e)
@@ -138,11 +299,16 @@ namespace PaintApp
             var item = ActiveLayer as DrawingLayer;
             if (MessageBox.Show($"Czy na pewno chcesz usunąć warstwę '{item.Name}'?", "Usuń warstwę",
                                     MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
-                {
-                    DrawingCanvas.Children.Remove(item.ImageControl);
-                    Layers.Remove(item);
-                    ActiveLayer = null;
-                }
+            {
+                int index = Layers.IndexOf(item);
+                Layers.Remove(item);
+                DrawingCanvas.Children.Remove(item.ImageControl);
+                undoLayerStack.Push(new LayerAction { Type = LayerAction.ActionType.Remove, Layer = item, Index = index });
+                redoLayerStack.Clear();
+
+                ActiveLayer = Layers.FirstOrDefault();
+                LayerList.SelectedItem = ActiveLayer;
+            }
 
         }
 
@@ -157,6 +323,10 @@ namespace PaintApp
                 Layers.Insert(0, itemCopy);
                 DrawingCanvas.Children.Insert(0, itemCopy.ImageControl);
                 LayerList.SelectedItem = itemCopy;
+                ActiveLayer = itemCopy;
+
+                undoLayerStack.Push(new LayerAction { Type = LayerAction.ActionType.Duplicate, Layer = itemCopy, Index = 0 });
+                redoLayerStack.Clear();
             }
 
         }
@@ -165,7 +335,7 @@ namespace PaintApp
         private void ShowHideLayer_Click(Object sender, RoutedEventArgs e)
         {
             var item = ActiveLayer as DrawingLayer;
-            if(item!=null){ item.IsVisible = !item.IsVisible; }
+            if (item != null) { item.IsVisible = !item.IsVisible; }
             RedrawCanvas();
         }
 
@@ -179,13 +349,36 @@ namespace PaintApp
                 {
                     DrawingCanvas.Children.Add(layer.ImageControl);
                 }
-               
+
             }
-            }
+        }
 
         private void Canvas_MouseDown(object sender, MouseButtonEventArgs e)
         {
             if (ActiveLayer == null) return;
+            if (e.StylusDevice != null && e.StylusDevice.TabletDevice.Type == TabletDeviceType.Stylus)
+            {
+                StatusLabel.Content = "Tryb: Rysik";
+                currentMode = InputMode.Stylus;
+            }
+            else
+            {
+                StatusLabel.Content = "Tryb: Mysz";
+                currentMode = InputMode.Mouse;
+            }
+
+
+            if (isFillModeEnabled)
+            {
+                FillEntireLayerWithColor();
+                isFillModeEnabled = false;
+                Cursor = Cursors.Arrow; 
+                return;
+            }
+
+           
+            ActiveLayer.BeginDraw();
+            isDrawing = true;
 
             shapeStart = e.GetPosition(DrawingCanvas);
 
@@ -203,9 +396,10 @@ namespace PaintApp
             {
                 isDrawing = true;
                 lastPoint = shapeStart;
-                DrawPoint(lastPoint.Value);
+                DrawPoint(lastPoint.Value, brushSize);
             }
         }
+
 
 
         private void Canvas_MouseMove(object sender, MouseEventArgs e)
@@ -230,6 +424,7 @@ namespace PaintApp
         private void Canvas_MouseUp(object sender, MouseButtonEventArgs e)
         {
             if (ActiveLayer == null) return;
+
 
             isDrawing = false;
             lastPoint = null;
@@ -281,7 +476,7 @@ namespace PaintApp
 
 
 
-        private void DrawPoint(Point point)
+        private void DrawPoint(Point point, int size)
         {
             var wb = ActiveLayer.Bitmap;
             int centerX = (int)point.X;
@@ -309,7 +504,7 @@ namespace PaintApp
 
             wb.Lock();
 
-            int halfSize = brushSize / 2;
+            int halfSize = size / 2;
 
             for (int dx = -halfSize; dx <= halfSize; dx++)
             {
@@ -331,6 +526,8 @@ namespace PaintApp
 
 
 
+
+
         private void DrawLine(Point from, Point to)
         {
             var dx = to.X - from.X;
@@ -341,7 +538,7 @@ namespace PaintApp
                 double t = (double)i / steps;
                 double x = from.X + dx * t;
                 double y = from.Y + dy * t;
-                DrawPoint(new Point(x, y));
+                DrawPoint(new Point(x, y), brushSize);
             }
         }
 
@@ -357,13 +554,50 @@ namespace PaintApp
 
         private void OpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if(ActiveLayer != null)
+            if (ActiveLayer != null)
             {
                 ActiveLayer.ImageControl.Opacity = (double)e.NewValue;
                 RedrawCanvas();
             }
-            
+
         }
+        private void Tool_FillLayer_Click(object sender, RoutedEventArgs e)
+        {
+            isFillModeEnabled = true;
+            Cursor = Cursors.Pen;
+        }
+        private void FillEntireLayerWithColor()
+        {
+            if (ActiveLayer == null) return;
+
+            var wb = ActiveLayer.Bitmap;
+            int width = wb.PixelWidth;
+            int height = wb.PixelHeight;
+
+            byte[] colorData = new byte[] {
+        currentColor.B,
+        currentColor.G,
+        currentColor.R,
+        currentColor.A
+    };
+
+            byte[] fullBuffer = new byte[width * height * 4];
+
+            for (int i = 0; i < fullBuffer.Length; i += 4)
+            {
+                fullBuffer[i] = colorData[0];
+                fullBuffer[i + 1] = colorData[1];
+                fullBuffer[i + 2] = colorData[2];
+                fullBuffer[i + 3] = colorData[3];
+            }
+
+            wb.Lock();
+            wb.WritePixels(new Int32Rect(0, 0, width, height), fullBuffer, width * 4, 0);
+            wb.Unlock();
+        }
+
+
+
 
         private void ZoomCanvas_MouseWheel(object sender, MouseWheelEventArgs e)
         {
@@ -374,24 +608,17 @@ namespace PaintApp
         private void Tool_SelectRect_Click(object sender, RoutedEventArgs e)
         {
             currentSelectMode = SelectMode.Rectangle;
+            Cursor = Cursors.Cross;
             // inicjalizacja zaznaczenia
         }
 
         private void Tool_SelectFree_Click(object sender, RoutedEventArgs e)
         {
             currentSelectMode = SelectMode.Free;
+            Cursor = Cursors.Cross;
             // inicjalizacja dowolnego zaznaczenia
         }
-        private void SaveImage(string filePath)
-        {
-            if (ActiveLayer == null) return;
 
-            var encoder = new PngBitmapEncoder();
-            encoder.Frames.Add(BitmapFrame.Create(ActiveLayer.Bitmap));
-
-            using FileStream fs = new FileStream(filePath, FileMode.Create);
-            encoder.Save(fs);
-        }
 
         private void SaveAsPng_Click(object sender, RoutedEventArgs e)
         {
@@ -405,9 +632,9 @@ namespace PaintApp
 
         private void SaveImageToFile(string filter, BitmapEncoder encoder, string ext)
         {
-            if (ActiveLayer == null)
+            if (Layers == null || Layers.Count == 0)
             {
-                MessageBox.Show("Brak aktywnej warstwy do zapisu.");
+                MessageBox.Show("Brak warstw do zapisania.");
                 return;
             }
 
@@ -420,14 +647,42 @@ namespace PaintApp
 
             if (dlg.ShowDialog() == true)
             {
+
+                int width = (int)DrawingCanvas.Width;
+                int height = (int)DrawingCanvas.Height;
+
+                var renderTarget = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+                var drawingVisual = new DrawingVisual();
+
+                using (DrawingContext context = drawingVisual.RenderOpen())
+                {
+                    foreach (var layer in Layers)
+                    {
+                        if (layer.ImageControl.Visibility == Visibility.Visible)
+                        {
+                            var image = layer.ImageControl;
+                            var topLeft = new Point(Canvas.GetLeft(image), Canvas.GetTop(image));
+                            if (double.IsNaN(topLeft.X)) topLeft.X = 0;
+                            if (double.IsNaN(topLeft.Y)) topLeft.Y = 0;
+
+                            context.DrawImage(image.Source, new Rect(topLeft, new Size(image.Source.Width, image.Source.Height)));
+                        }
+                    }
+                }
+
+                renderTarget.Render(drawingVisual);
+
+
                 encoder.Frames.Clear();
-                encoder.Frames.Add(BitmapFrame.Create(ActiveLayer.Bitmap));
+                encoder.Frames.Add(BitmapFrame.Create(renderTarget));
+
                 using (var stream = new FileStream(dlg.FileName, FileMode.Create))
                 {
                     encoder.Save(stream);
                 }
             }
         }
+
         private void DrawFinalShape(ShapeType shapeType, Point start, Point end)
         {
             if (ActiveLayer == null) return;
@@ -521,7 +776,7 @@ namespace PaintApp
         //Usuwanie wszystkich warstw, tworzenie jednej nowej
         private void NewFile_Click(object sender, EventArgs e)
         {
-            foreach(var layer in Layers.ToList())
+            foreach (var layer in Layers.ToList())
             {
                 DrawingCanvas.Children.Remove(layer.ImageControl);
                 Layers.Remove(layer);
@@ -531,30 +786,43 @@ namespace PaintApp
 
         private void Save_Click(object sender, RoutedEventArgs e)
         {
-            SaveAsPng_Click(sender, e); 
+            SaveAsPng_Click(sender, e);
         }
         private void Open_Click(object sender, RoutedEventArgs e)
         {
             OpenFileDialog dlg = new OpenFileDialog
             {
                 Filter = "Image Files|*.png;*.jpg;*.jpeg;*.bmp",
-                Title = "Otwórz obraz"
+                Title = "Otwórz obraz",
+                Multiselect = false
             };
 
             if (dlg.ShowDialog() == true)
             {
-                var bitmap = new BitmapImage(new Uri(dlg.FileName));
+
+                BitmapImage bitmap = new BitmapImage(new Uri(dlg.FileName));
+
+
                 var layer = new DrawingLayer(bitmap.PixelWidth, bitmap.PixelHeight)
                 {
                     Name = $"Warstwa {Layers.Count + 1}"
                 };
 
                 layer.Bitmap = new WriteableBitmap(bitmap);
+                layer.ImageControl.Source = layer.Bitmap;
+
+
                 Layers.Insert(0, layer);
                 DrawingCanvas.Children.Insert(0, layer.ImageControl);
+
+                Canvas.SetLeft(layer.ImageControl, 0);
+                Canvas.SetTop(layer.ImageControl, 0);
+
+
                 LayerList.SelectedItem = layer;
             }
         }
+
         private void DrawingCanvas_MouseWheel(object sender, MouseWheelEventArgs e)
         {
             const double zoomFactor = 0.1;
@@ -575,7 +843,224 @@ namespace PaintApp
         {
             this.Close();
         }
+        //rysik
+        private void DrawingCanvas_StylusDown(object sender, StylusDownEventArgs e)
+        {
+            if (ActiveLayer == null) return;
+            currentMode = InputMode.Stylus;
+            StatusLabel.Content = "Tryb: Rysik";
+            shapeStart = e.GetPosition(DrawingCanvas);
+            lastPoint = shapeStart;
+            isDrawing = true;
+            DrawStylusPoint(e);
+            e.Handled = true;
+        }
+        private void DrawingCanvas_StylusMove(object sender, StylusEventArgs e)
+        {
+            if (ActiveLayer == null || !isDrawing) return;
+            Point current = e.GetPosition(DrawingCanvas);
+            if (currentShape != ShapeType.None && previewShape != null)
+            {
+                UpdatePreviewShape(previewShape, shapeStart, current);
+            }
+            else if (lastPoint.HasValue)
+            {
+                DrawLine(lastPoint.Value, current);
+                lastPoint = current;
+            }
+            e.Handled = true;
+        }
+        private void DrawingCanvas_StylusUp(object sender, StylusEventArgs e)
+        {
+            if (ActiveLayer == null) return;
+            isDrawing = false;
+            lastPoint = null;
+            if (previewShape != null)
+            {
+                Point end = e.GetPosition(DrawingCanvas);
+                DrawFinalShape(currentShape, shapeStart, end);
+                DrawingCanvas.Children.Remove(previewShape);
+                previewShape = null;
+            }
+            e.Handled = true;
+        }
+        //nacisk i kąt rysika
+        private void DrawStylusPoint(StylusEventArgs e)
+        {
+            StylusPointCollection points = e.GetStylusPoints(DrawingCanvas);
+            foreach (StylusPoint p in points)
+            {
+                float pressure = p.PressureFactor; // 0.0 - 1.0
+                Vector tilt = GetStylusTilt(p);
 
-       
+                int dynamicBrushSize = Math.Max(1, (int)(brushSize * pressure));
+                Color dynamicColor = currentColor;
+
+                DrawPoint(new Point(p.X, p.Y), dynamicBrushSize);
+            }
+        }
+
+        private Vector GetStylusTilt(StylusPoint point)
+        {
+            if (point.HasProperty(StylusPointProperties.XTiltOrientation) &&
+                point.HasProperty(StylusPointProperties.YTiltOrientation))
+            {
+                double xtilt = point.GetPropertyValue(StylusPointProperties.XTiltOrientation);
+                double ytilt = point.GetPropertyValue(StylusPointProperties.YTiltOrientation);
+                return new Vector(xtilt, ytilt);
+            }
+            return new Vector(0, 0); // fallback
+        }
+        //cofanie ostatniej aktywnosci i ponawianie zmian
+        private void Undo_Click(object sender, RoutedEventArgs e)
+        {
+            if (ActiveLayer?.CanUndo() == true)
+            {
+                ActiveLayer.Undo();
+
+               
+                if (IsLayerEmpty(ActiveLayer) && undoLayerStack.All(a => a.Layer != ActiveLayer))
+                {
+                    
+                    int index = Layers.IndexOf(ActiveLayer);
+                    var removedLayer = ActiveLayer;
+
+                    Layers.Remove(removedLayer);
+                    DrawingCanvas.Children.Remove(removedLayer.ImageControl);
+
+                    undoLayerStack.Push(new LayerAction
+                    {
+                        Type = LayerAction.ActionType.Remove,
+                        Layer = removedLayer,
+                        Index = index
+                    });
+
+                    ActiveLayer = Layers.FirstOrDefault();
+                    LayerList.SelectedItem = ActiveLayer;
+                }
+                return;
+            }
+
+
+
+            if (undoLayerStack.Count > 0)
+            {
+                var action = undoLayerStack.Pop();
+                switch (action.Type)
+                {
+                    case LayerAction.ActionType.Add:
+                        Layers.Remove(action.Layer);
+                        DrawingCanvas.Children.Remove(action.Layer.ImageControl);
+                        break;
+
+                    case LayerAction.ActionType.Remove:
+                        Layers.Insert(action.Index, action.Layer);
+                        DrawingCanvas.Children.Insert(action.Index, action.Layer.ImageControl);
+                        break;
+
+                    case LayerAction.ActionType.Duplicate:
+                        Layers.Remove(action.Layer);
+                        DrawingCanvas.Children.Remove(action.Layer.ImageControl);
+                        break;
+
+                    case LayerAction.ActionType.MoveUp:
+                        int indexUp = Layers.IndexOf(action.Layer);
+                        if (indexUp < Layers.Count - 1)
+                            Layers.Move(indexUp, indexUp + 1);
+                        RedrawCanvas();
+                        break;
+
+                    case LayerAction.ActionType.MoveDown:
+                        int indexDown = Layers.IndexOf(action.Layer);
+                        if (indexDown > 0)
+                            Layers.Move(indexDown, indexDown - 1);
+                        RedrawCanvas();
+                        break;
+                }
+
+                redoLayerStack.Push(action);
+                LayerList.SelectedItem = ActiveLayer = action.Layer;
+            }
+        }
+
+
+        private void Redo_Click(object sender, RoutedEventArgs e)
+        {
+            if (ActiveLayer?.CanRedo() == true)
+            {
+                ActiveLayer.Redo();
+                return;
+            }
+
+            if (redoLayerStack.Count > 0)
+            {
+                var action = redoLayerStack.Pop();
+                switch (action.Type)
+                {
+                    case LayerAction.ActionType.Add:
+                        Layers.Insert(action.Index, action.Layer);
+                        DrawingCanvas.Children.Insert(action.Index, action.Layer.ImageControl);
+                        break;
+
+                    case LayerAction.ActionType.Remove:
+                        Layers.Remove(action.Layer);
+                        DrawingCanvas.Children.Remove(action.Layer.ImageControl);
+                        break;
+
+                    case LayerAction.ActionType.Duplicate:
+                        Layers.Insert(action.Index, action.Layer);
+                        DrawingCanvas.Children.Insert(action.Index, action.Layer.ImageControl);
+                        break;
+
+                    case LayerAction.ActionType.MoveUp:
+                        int indexUp = Layers.IndexOf(action.Layer);
+                        if (indexUp > 0)
+                            Layers.Move(indexUp, indexUp - 1);
+                        RedrawCanvas();
+                        break;
+
+                    case LayerAction.ActionType.MoveDown:
+                        int indexDown = Layers.IndexOf(action.Layer);
+                        if (indexDown < Layers.Count - 1)
+                            Layers.Move(indexDown, indexDown + 1);
+                        RedrawCanvas();
+                        break;
+                }
+
+                undoLayerStack.Push(action);
+                LayerList.SelectedItem = ActiveLayer = action.Layer;
+            }
+
+            CommandManager.InvalidateRequerySuggested();
+        }
+
+
+        //wartstwa
+        public class LayerAction
+        {
+            public enum ActionType
+            {
+                Add, Remove, Activate, MoveUp, MoveDown, Duplicate
+            }
+
+            public ActionType Type { get; set; }
+
+           
+            public required DrawingLayer Layer { get; set; }
+
+            public int Index { get; set; }
+        }
+
+        private bool IsLayerEmpty(DrawingLayer layer)
+        {
+            if (layer?.Bitmap == null) return true;
+
+            var buffer = new byte[layer.Bitmap.PixelHeight * layer.Bitmap.BackBufferStride];
+            layer.Bitmap.CopyPixels(buffer, layer.Bitmap.BackBufferStride, 0);
+
+            return buffer.All(b => b == 0); // przezroczystość = 0
+        }
+
+
     }
 }
