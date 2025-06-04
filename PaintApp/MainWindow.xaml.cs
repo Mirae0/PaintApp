@@ -36,7 +36,7 @@ namespace PaintApp
 
         const int canvasWidth = 800;
         const int canvasHeight = 600;
-        private enum ToolType { Pen, Eraser }
+        private enum ToolType { Pen, Eraser, Select }
         private ToolType currentTool = ToolType.Pen;
         private Color currentColor = Colors.Black;
         private int brushSize = 1;
@@ -45,8 +45,11 @@ namespace PaintApp
         private enum SelectMode { None, Rectangle, Free }
         private SelectMode currentSelectMode = SelectMode.None;
         private Shape? previewShape = null;
+        private Shape? selectedShape = null;
         private Point shapeStart;
-        private Rect? selectionRect = null;
+        private Point? selectedStart=null;
+        private Point? selectedEnd=null;
+        private Rect selectionRect = new Rect(new Point(0,0),new Point(canvasWidth,canvasHeight));
         private WriteableBitmap? selectionData = null;
 
 
@@ -56,229 +59,7 @@ namespace PaintApp
         private void Tool_Ellipse_Click(object sender, RoutedEventArgs e) => currentShape = ShapeType.Ellipse;
 
 
-
-
-        private void SetToolToPen(object sender, RoutedEventArgs e)
-        {
-            currentTool = ToolType.Pen;
-            currentShape = ShapeType.None;
-        }
-
-        private void SetToolToEraser(object sender, RoutedEventArgs e)
-        {
-            currentTool = ToolType.Eraser;
-            currentShape = ShapeType.None;
-        }
-
-
-        private void AddLayer_Click(object sender, RoutedEventArgs e)
-        {
-            ContextMenu contextMenu = (ContextMenu)Resources["LayerMenu"];
-            var layer = new DrawingLayer(canvasWidth, canvasHeight)
-            {
-                Name = $"Warstwa {Layers.Count + 1}"
-            };
-            Layers.Insert(0, layer);
-            DrawingCanvas.Children.Insert(0, layer.ImageControl);
-            LayerList.SelectedItem = layer;
-        }
-
-
-        /// Zmiana aktywnej warstwy
-
-        private void LayerList_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (LayerList.SelectedItem is DrawingLayer selected)
-            {
-                ActiveLayer = selected;
-                OpacitySlider.Value = selected.ImageControl.Opacity;
-            }
-                
-        }
-
-        
-        private void MoveLayerUp_Click(object sender, RoutedEventArgs e)
-        {
-            if (ActiveLayer == null) return;
-            int index = Layers.IndexOf(ActiveLayer);
-            if (index > 0)
-            {
-                Layers.Move(index, index - 1);
-                RedrawCanvas();
-            }
-        }
-
-        private void MoveLayerDown_Click(object sender, RoutedEventArgs e)
-        {
-            if (ActiveLayer == null) return;
-            int index = Layers.IndexOf(ActiveLayer);
-            if (index < Layers.Count - 1)
-            {
-                Layers.Move(index, index + 1);
-                RedrawCanvas();
-            }
-        }
-
-       // Otwieranie menu kontekstowego dla warstwy
-        private void LayerList_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            var item = (sender as ListBox)?.SelectedItem as DrawingLayer;
-            if (item != null)
-            {
-                ContextMenu cm = this.FindResource("LayerMenu") as ContextMenu;
-                cm.PlacementTarget = sender as Button;
-                cm.IsOpen = true;
-                ActiveLayer = item;
-               
-            }   
-        }
-        // Usuwanie warstwy
-        private void RemoveLayer_Click(object sender, RoutedEventArgs e)
-        {
-            var item = ActiveLayer as DrawingLayer;
-            if (MessageBox.Show($"Czy na pewno chcesz usunąć warstwę '{item.Name}'?", "Usuń warstwę",
-                                    MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
-                {
-                    DrawingCanvas.Children.Remove(item.ImageControl);
-                    Layers.Remove(item);
-                    ActiveLayer = null;
-                }
-
-        }
-
-        //Duplikowanie warstwy
-        private void DuplicateLayer_Click(Object sender, RoutedEventArgs e)
-        {
-            var item = ActiveLayer as DrawingLayer;
-            if (item != null)
-            {
-                var itemCopy = new DrawingLayer(item);
-                itemCopy.Name += "-Copy";
-                Layers.Insert(0, itemCopy);
-                DrawingCanvas.Children.Insert(0, itemCopy.ImageControl);
-                LayerList.SelectedItem = itemCopy;
-            }
-
-        }
-
-        //Ukryj / Pokaż warstwę
-        private void ShowHideLayer_Click(Object sender, RoutedEventArgs e)
-        {
-            var item = ActiveLayer as DrawingLayer;
-            if(item!=null){ item.IsVisible = !item.IsVisible; }
-            RedrawCanvas();
-        }
-
-
-        private void RedrawCanvas()
-        {
-            DrawingCanvas.Children.Clear();
-            foreach (var layer in Layers)
-            {
-                if (layer.IsVisible)
-                {
-                    DrawingCanvas.Children.Add(layer.ImageControl);
-                }
-               
-            }
-            }
-
-        private void Canvas_MouseDown(object sender, MouseButtonEventArgs e)
-        {
-            if (ActiveLayer == null) return;
-
-            shapeStart = e.GetPosition(DrawingCanvas);
-
-            if (currentShape != ShapeType.None)
-            {
-                previewShape = CreatePreviewShape(currentShape);
-                if (previewShape != null)
-                {
-                    Canvas.SetLeft(previewShape, shapeStart.X);
-                    Canvas.SetTop(previewShape, shapeStart.Y);
-                    DrawingCanvas.Children.Add(previewShape);
-                }
-            }
-            else
-            {
-                isDrawing = true;
-                lastPoint = shapeStart;
-                DrawPoint(lastPoint.Value);
-            }
-        }
-
-
-        private void Canvas_MouseMove(object sender, MouseEventArgs e)
-        {
-            if (ActiveLayer == null) return;
-            Point current = e.GetPosition(DrawingCanvas);
-            if (ActiveLayer.IsVisible)
-            {
-                if (currentShape != ShapeType.None && previewShape != null)
-                {
-                    UpdatePreviewShape(previewShape, shapeStart, current);
-                }
-                else if (isDrawing && lastPoint.HasValue)
-                {
-                    DrawLine(lastPoint.Value, current);
-                    lastPoint = current;
-                }
-            }
-        }
-
-
-        private void Canvas_MouseUp(object sender, MouseButtonEventArgs e)
-        {
-            if (ActiveLayer == null) return;
-
-            isDrawing = false;
-            lastPoint = null;
-
-            if (previewShape != null)
-            {
-                Point end = e.GetPosition(DrawingCanvas);
-                DrawFinalShape(currentShape, shapeStart, end);
-
-                DrawingCanvas.Children.Remove(previewShape);
-                previewShape = null;
-            }
-        }
-        private Shape CreatePreviewShape(ShapeType type)
-        {
-            Shape shape = type switch
-            {
-                ShapeType.Line => new Line { Stroke = new SolidColorBrush(currentColor), StrokeThickness = brushSize },
-                ShapeType.Rectangle => new Rectangle { Stroke = new SolidColorBrush(currentColor), StrokeThickness = brushSize },
-                ShapeType.Ellipse => new Ellipse { Stroke = new SolidColorBrush(currentColor), StrokeThickness = brushSize },
-                _ => null
-            };
-            shape.StrokeDashArray = new DoubleCollection { 2, 2 }; // podgląd
-            return shape;
-        }
-
-
-        private void UpdatePreviewShape(Shape shape, Point start, Point end)
-        {
-            if (shape is Line line)
-            {
-                line.X1 = start.X;
-                line.Y1 = start.Y;
-                line.X2 = end.X;
-                line.Y2 = end.Y;
-            }
-            else
-            {
-                double x = Math.Min(start.X, end.X);
-                double y = Math.Min(start.Y, end.Y);
-                double w = Math.Abs(end.X - start.X);
-                double h = Math.Abs(end.Y - start.Y);
-                Canvas.SetLeft(shape, x);
-                Canvas.SetTop(shape, y);
-                shape.Width = w;
-                shape.Height = h;
-            }
-        }
-
+        #region DrawingShapes
 
 
         private void DrawPoint(Point point)
@@ -345,6 +126,361 @@ namespace PaintApp
             }
         }
 
+        private Shape CreatePreviewShape(ShapeType type)
+        {
+            Shape shape = type switch
+            {
+                ShapeType.Line => new Line { Stroke = new SolidColorBrush(currentColor), StrokeThickness = brushSize },
+                ShapeType.Rectangle => new Rectangle { Stroke = new SolidColorBrush(currentColor), StrokeThickness = brushSize },
+                ShapeType.Ellipse => new Ellipse { Stroke = new SolidColorBrush(currentColor), StrokeThickness = brushSize },
+                _ => null
+            };
+            shape.StrokeDashArray = new DoubleCollection { 2, 2 }; // podgląd
+            return shape;
+        }
+
+
+        private void UpdatePreviewShape(Shape shape, Point start, Point end)
+        {
+            if (shape is Line line)
+            {
+                line.X1 = start.X;
+                line.Y1 = start.Y;
+                line.X2 = end.X;
+                line.Y2 = end.Y;
+            }
+            else
+            {
+                double x = Math.Min(start.X, end.X);
+                double y = Math.Min(start.Y, end.Y);
+                double w = Math.Abs(end.X - start.X);
+                double h = Math.Abs(end.Y - start.Y);
+                Canvas.SetLeft(shape, x);
+                Canvas.SetTop(shape, y);
+                shape.Width = w;
+                shape.Height = h;
+            }
+        }
+
+
+
+        private void DrawFinalShape(ShapeType shapeType, Point start, Point end)
+        {
+            if (ActiveLayer == null) return;
+
+            var wb = ActiveLayer.Bitmap;
+
+            int x1 = (int)Math.Clamp(Math.Min(start.X, end.X), 0, wb.PixelWidth - 1);
+            int y1 = (int)Math.Clamp(Math.Min(start.Y, end.Y), 0, wb.PixelHeight - 1);
+            int x2 = (int)Math.Clamp(Math.Max(start.X, end.X), 0, wb.PixelWidth - 1);
+            int y2 = (int)Math.Clamp(Math.Max(start.Y, end.Y), 0, wb.PixelHeight - 1);
+
+            wb.Lock();
+
+            switch (shapeType)
+            {
+                case ShapeType.Line:
+                    DrawLine(start, end);
+                    break;
+
+                case ShapeType.Rectangle:
+                    DrawRectangle(wb, x1, y1, x2, y2);
+                    break;
+
+                case ShapeType.Ellipse:
+                    DrawEllipse(wb, x1, y1, x2, y2);
+                    break;
+
+                default:
+                    break;
+            }
+
+            wb.Unlock();
+        }
+
+        private void DrawRectangle(WriteableBitmap wb, int x1, int y1, int x2, int y2)
+        {
+            for (int x = x1; x <= x2; x++)
+            {
+             
+                DrawPoint(new Point(x, y1));
+                DrawPoint(new Point(x, y2));
+            }
+            for (int y = y1; y <= y2; y++)
+            {
+            
+                DrawPoint(new Point(x1, y));
+                DrawPoint(new Point(x2, y));
+            }
+        }
+
+        private void DrawEllipse(WriteableBitmap wb, int x1, int y1, int x2, int y2)
+        {
+            int centerX = (x1 + x2) / 2;
+            int centerY = (y1 + y2) / 2;
+            int radiusX = (x2 - x1) / 2;
+            int radiusY = (y2 - y1) / 2;
+
+            for (double angle = 0; angle < 360; angle += 0.5)
+            {
+                double rad = angle * Math.PI / 180;
+                int x = (int)(centerX + radiusX * Math.Cos(rad));
+                int y = (int)(centerY + radiusY * Math.Sin(rad));
+                DrawPoint(new Point(x,y));
+            }
+        }
+    
+
+        private void Tool_SelectRect_Click(object sender, RoutedEventArgs e)
+        {
+            currentSelectMode = SelectMode.Rectangle;
+            currentTool = ToolType.Select;
+            currentShape = ShapeType.Rectangle;
+            // inicjalizacja zaznaczenia
+
+        }
+
+        private void Tool_SelectFree_Click(object sender, RoutedEventArgs e)
+        {
+            currentSelectMode = SelectMode.Free;
+            // inicjalizacja dowolnego zaznaczenia
+        }
+
+        private void DrawFinalSelectShape(Shape shape,Point start, Point end)
+        {
+            if(selectedShape != null)
+            {
+                DrawingCanvas.Children.Remove(selectedShape);
+            }
+            selectedShape = shape;
+            shape.StrokeDashArray = new DoubleCollection { 2, 2 };
+            DrawFinalShape(currentShape,start,end);
+            if(currentSelectMode == SelectMode.Rectangle)
+            {
+                selectionRect = new Rect(start,end);
+            }
+            selectedEnd= end;
+            selectedStart= start;
+            //Tu sa punkty start i koniec. Testować czy współrzędne między nimi żeby można było rysować (Przynajmniej dla rect)
+
+        }
+
+        #endregion
+
+        #region Layers
+        private void AddLayer_Click(object sender, RoutedEventArgs e)
+        {
+            ContextMenu contextMenu = (ContextMenu)Resources["LayerMenu"];
+            var layer = new DrawingLayer(canvasWidth, canvasHeight)
+            {
+                Name = $"Warstwa {Layers.Count + 1}"
+            };
+            Layers.Insert(0, layer);
+            DrawingCanvas.Children.Insert(0, layer.ImageControl);
+            LayerList.SelectedItem = layer;
+        }
+
+
+        /// Zmiana aktywnej warstwy
+
+        private void LayerList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (LayerList.SelectedItem is DrawingLayer selected)
+            {
+                ActiveLayer = selected;
+                OpacitySlider.Value = selected.ImageControl.Opacity;
+            }
+
+        }
+
+
+        private void MoveLayerUp_Click(object sender, RoutedEventArgs e)
+        {
+            if (ActiveLayer == null) return;
+            int index = Layers.IndexOf(ActiveLayer);
+            if (index > 0)
+            {
+                Layers.Move(index, index - 1);
+                RedrawCanvas();
+            }
+        }
+
+        private void MoveLayerDown_Click(object sender, RoutedEventArgs e)
+        {
+            if (ActiveLayer == null) return;
+            int index = Layers.IndexOf(ActiveLayer);
+            if (index < Layers.Count - 1)
+            {
+                Layers.Move(index, index + 1);
+                RedrawCanvas();
+            }
+        }
+
+        // Otwieranie menu kontekstowego dla warstwy
+        private void LayerList_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            var item = (sender as ListBox)?.SelectedItem as DrawingLayer;
+            if (item != null)
+            {
+                ContextMenu cm = this.FindResource("LayerMenu") as ContextMenu;
+                cm.PlacementTarget = sender as Button;
+                cm.IsOpen = true;
+                ActiveLayer = item;
+
+            }
+        }
+        // Usuwanie warstwy
+        private void RemoveLayer_Click(object sender, RoutedEventArgs e)
+        {
+            var item = ActiveLayer as DrawingLayer;
+            if (MessageBox.Show($"Czy na pewno chcesz usunąć warstwę '{item.Name}'?", "Usuń warstwę",
+                                    MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+            {
+                DrawingCanvas.Children.Remove(item.ImageControl);
+                Layers.Remove(item);
+                ActiveLayer = null;
+            }
+
+        }
+
+        //Duplikowanie warstwy
+        private void DuplicateLayer_Click(Object sender, RoutedEventArgs e)
+        {
+            var item = ActiveLayer as DrawingLayer;
+            if (item != null)
+            {
+                var itemCopy = new DrawingLayer(item);
+                itemCopy.Name += "-Copy";
+                Layers.Insert(0, itemCopy);
+                DrawingCanvas.Children.Insert(0, itemCopy.ImageControl);
+                LayerList.SelectedItem = itemCopy;
+            }
+
+        }
+
+        //Ukryj / Pokaż warstwę
+        private void ShowHideLayer_Click(Object sender, RoutedEventArgs e)
+        {
+            var item = ActiveLayer as DrawingLayer;
+            if (item != null) { item.IsVisible = !item.IsVisible; }
+            RedrawCanvas();
+        }
+
+
+        #endregion
+
+
+        private void SetToolToPen(object sender, RoutedEventArgs e)
+        {
+            currentTool = ToolType.Pen;
+            currentShape = ShapeType.None;
+        }
+
+        private void SetToolToEraser(object sender, RoutedEventArgs e)
+        {
+            currentTool = ToolType.Eraser;
+            currentShape = ShapeType.None;
+        }
+
+
+       
+
+        private void RedrawCanvas()
+        {
+            DrawingCanvas.Children.Clear();
+            foreach (var layer in Layers)
+            {
+                if (layer.IsVisible)
+                {
+                    DrawingCanvas.Children.Add(layer.ImageControl);
+                }
+               
+            }
+            }
+
+        private void Canvas_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (ActiveLayer == null) return;
+
+            shapeStart = e.GetPosition(DrawingCanvas);
+            if (currentTool == ToolType.Select || selectionRect.Contains(shapeStart)) //Punkt wewnątrz zaznaczenia
+            {
+                if (currentShape != ShapeType.None)
+                {
+                    previewShape = CreatePreviewShape(currentShape);
+                    if (previewShape != null)
+                    {
+                        Canvas.SetLeft(previewShape, shapeStart.X);
+                        Canvas.SetTop(previewShape, shapeStart.Y);
+                        DrawingCanvas.Children.Add(previewShape);
+                    }
+                }
+                else
+                {
+                    isDrawing = true;
+                    lastPoint = shapeStart;
+                    DrawPoint(lastPoint.Value);
+                }
+            }
+        }
+
+
+        private void Canvas_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (ActiveLayer == null) return;
+            Point current = e.GetPosition(DrawingCanvas);
+            if (ActiveLayer.IsVisible)
+            {
+                if (currentTool == ToolType.Select || selectionRect.Contains(current)) //Punkt wewnątrz zaznaczenia
+                {
+                    if (currentShape != ShapeType.None && previewShape != null)
+                    {
+                        UpdatePreviewShape(previewShape, shapeStart, current);
+                    }
+                    else if (isDrawing && lastPoint.HasValue)
+                    {
+                        DrawLine(lastPoint.Value, current);
+                        lastPoint = current;
+                    }
+                }
+                
+            }
+        }
+
+
+        private void Canvas_MouseUp(object sender, MouseButtonEventArgs e)
+        {
+            if (ActiveLayer == null) return;
+
+            isDrawing = false;
+            lastPoint = null;
+
+            if (previewShape != null)
+            {
+                if (currentTool == ToolType.Select || selectionRect.Contains(e.GetPosition(DrawingCanvas))) //Punkt wewnątrz zaznaczenia
+                {
+                    if (currentTool != ToolType.Select)
+                    {
+                        Point end = e.GetPosition(DrawingCanvas);
+                        DrawFinalShape(currentShape, shapeStart, end);
+
+                        DrawingCanvas.Children.Remove(previewShape);
+                        previewShape = null;
+                    }
+                    else
+                    {
+                        Point end = e.GetPosition(DrawingCanvas);
+                        //Rysuj finalny select
+                        DrawFinalSelectShape(previewShape, shapeStart, e.GetPosition(DrawingCanvas));
+                        previewShape = null;
+                        DrawingCanvas.Children.Remove(previewShape);
+                    }
+                }
+            }
+        }
+       
+
+
         private void ColorPicker_SelectedColorChanged(object sender, RoutedPropertyChangedEventArgs<Color?> e)
         {
             if (e.NewValue.HasValue)
@@ -371,17 +507,7 @@ namespace PaintApp
             CanvasScale.ScaleX *= scale;
             CanvasScale.ScaleY *= scale;
         }
-        private void Tool_SelectRect_Click(object sender, RoutedEventArgs e)
-        {
-            currentSelectMode = SelectMode.Rectangle;
-            // inicjalizacja zaznaczenia
-        }
-
-        private void Tool_SelectFree_Click(object sender, RoutedEventArgs e)
-        {
-            currentSelectMode = SelectMode.Free;
-            // inicjalizacja dowolnego zaznaczenia
-        }
+      
         private void SaveImage(string filePath)
         {
             if (ActiveLayer == null) return;
@@ -428,95 +554,7 @@ namespace PaintApp
                 }
             }
         }
-        private void DrawFinalShape(ShapeType shapeType, Point start, Point end)
-        {
-            if (ActiveLayer == null) return;
-
-            var wb = ActiveLayer.Bitmap;
-
-            int x1 = (int)Math.Clamp(Math.Min(start.X, end.X), 0, wb.PixelWidth - 1);
-            int y1 = (int)Math.Clamp(Math.Min(start.Y, end.Y), 0, wb.PixelHeight - 1);
-            int x2 = (int)Math.Clamp(Math.Max(start.X, end.X), 0, wb.PixelWidth - 1);
-            int y2 = (int)Math.Clamp(Math.Max(start.Y, end.Y), 0, wb.PixelHeight - 1);
-
-            wb.Lock();
-
-            switch (shapeType)
-            {
-                case ShapeType.Line:
-                    DrawLine(start, end);
-                    break;
-
-                case ShapeType.Rectangle:
-                    DrawRectangle(wb, x1, y1, x2, y2);
-                    break;
-
-                case ShapeType.Ellipse:
-                    DrawEllipse(wb, x1, y1, x2, y2);
-                    break;
-
-                default:
-                    break;
-            }
-
-            wb.Unlock();
-        }
-
-        private void DrawRectangle(WriteableBitmap wb, int x1, int y1, int x2, int y2)
-        {
-            for (int x = x1; x <= x2; x++)
-            {
-                DrawPixel(wb, x, y1);
-                DrawPixel(wb, x, y2);
-            }
-            for (int y = y1; y <= y2; y++)
-            {
-                DrawPixel(wb, x1, y);
-                DrawPixel(wb, x2, y);
-            }
-        }
-
-        private void DrawEllipse(WriteableBitmap wb, int x1, int y1, int x2, int y2)
-        {
-            int centerX = (x1 + x2) / 2;
-            int centerY = (y1 + y2) / 2;
-            int radiusX = (x2 - x1) / 2;
-            int radiusY = (y2 - y1) / 2;
-
-            for (double angle = 0; angle < 360; angle += 0.5)
-            {
-                double rad = angle * Math.PI / 180;
-                int x = (int)(centerX + radiusX * Math.Cos(rad));
-                int y = (int)(centerY + radiusY * Math.Sin(rad));
-                DrawPixel(wb, x, y);
-            }
-        }
-        private void DrawPixel(WriteableBitmap wb, int x, int y)
-        {
-            if (x < 0 || y < 0 || x >= wb.PixelWidth || y >= wb.PixelHeight)
-                return;
-
-            byte[] colorData;
-
-            if (currentTool == ToolType.Pen)
-            {
-                colorData = new byte[]
-                {
-                    currentColor.B,
-                    currentColor.G,
-                    currentColor.R,
-                    currentColor.A
-                };
-            }
-            else // Eraser
-            {
-                colorData = new byte[] { 0, 0, 0, 0 };
-            }
-
-            var rect = new Int32Rect(x, y, 1, 1);
-            wb.WritePixels(rect, colorData, 4, 0);
-        }
-
+     
 
         //Usuwanie wszystkich warstw, tworzenie jednej nowej
         private void NewFile_Click(object sender, EventArgs e)
