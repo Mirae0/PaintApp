@@ -60,7 +60,7 @@ namespace PaintApp
 
         const int canvasWidth = 800;
         const int canvasHeight = 600;
-        private enum ToolType { Pen, Eraser }
+        private enum ToolType { Pen, Eraser, Select }
         private ToolType currentTool = ToolType.Pen;
         private Color currentColor = Colors.Black;
         private int brushSize = 1;
@@ -68,18 +68,18 @@ namespace PaintApp
         private ShapeType currentShape = ShapeType.None;
         private enum SelectMode { None, Rectangle, Free }
         private SelectMode currentSelectMode = SelectMode.None;
+        private bool invertedSelect;
         private Shape? previewShape = null;
+        private Shape? selectedShape = null;
         private Point shapeStart;
-        private Rect? selectionRect = null;
+        private Point? selectedStart=null;
+        private Point? selectedEnd=null;
+        private Rect selectionRect = new Rect(new Point(0,0),new Point(canvasWidth,canvasHeight));
         private WriteableBitmap? selectionData = null;
         public ICommand UndoCommand { get; set; }
         public ICommand RedoCommand { get; set; }
         private enum InputMode { None, Mouse, Stylus }
         private InputMode currentMode = InputMode.None;
-
-
-
-
 
 
         private bool CanUndo() => ActiveLayer != null && ActiveLayer.CanUndo();
@@ -340,143 +340,10 @@ namespace PaintApp
         }
 
 
-        private void RedrawCanvas()
-        {
-            DrawingCanvas.Children.Clear();
-            foreach (var layer in Layers)
-            {
-                if (layer.IsVisible)
-                {
-                    DrawingCanvas.Children.Add(layer.ImageControl);
-                }
-
-            }
-        }
-
-        private void Canvas_MouseDown(object sender, MouseButtonEventArgs e)
-        {
-            if (ActiveLayer == null) return;
-            if (e.StylusDevice != null && e.StylusDevice.TabletDevice.Type == TabletDeviceType.Stylus)
-            {
-                StatusLabel.Content = "Tryb: Rysik";
-                currentMode = InputMode.Stylus;
-            }
-            else
-            {
-                StatusLabel.Content = "Tryb: Mysz";
-                currentMode = InputMode.Mouse;
-            }
+        #region DrawingShapes
 
 
-            if (isFillModeEnabled)
-            {
-                FillEntireLayerWithColor();
-                isFillModeEnabled = false;
-                Cursor = Cursors.Arrow; 
-                return;
-            }
-
-           
-            ActiveLayer.BeginDraw();
-            isDrawing = true;
-
-            shapeStart = e.GetPosition(DrawingCanvas);
-
-            if (currentShape != ShapeType.None)
-            {
-                previewShape = CreatePreviewShape(currentShape);
-                if (previewShape != null)
-                {
-                    Canvas.SetLeft(previewShape, shapeStart.X);
-                    Canvas.SetTop(previewShape, shapeStart.Y);
-                    DrawingCanvas.Children.Add(previewShape);
-                }
-            }
-            else
-            {
-                isDrawing = true;
-                lastPoint = shapeStart;
-                DrawPoint(lastPoint.Value, brushSize);
-            }
-        }
-
-
-
-        private void Canvas_MouseMove(object sender, MouseEventArgs e)
-        {
-            if (ActiveLayer == null) return;
-            Point current = e.GetPosition(DrawingCanvas);
-            if (ActiveLayer.IsVisible)
-            {
-                if (currentShape != ShapeType.None && previewShape != null)
-                {
-                    UpdatePreviewShape(previewShape, shapeStart, current);
-                }
-                else if (isDrawing && lastPoint.HasValue)
-                {
-                    DrawLine(lastPoint.Value, current);
-                    lastPoint = current;
-                }
-            }
-        }
-
-
-        private void Canvas_MouseUp(object sender, MouseButtonEventArgs e)
-        {
-            if (ActiveLayer == null) return;
-
-
-            isDrawing = false;
-            lastPoint = null;
-
-            if (previewShape != null)
-            {
-                Point end = e.GetPosition(DrawingCanvas);
-                DrawFinalShape(currentShape, shapeStart, end);
-
-                DrawingCanvas.Children.Remove(previewShape);
-                previewShape = null;
-            }
-        }
-        private Shape CreatePreviewShape(ShapeType type)
-        {
-            Shape shape = type switch
-            {
-                ShapeType.Line => new Line { Stroke = new SolidColorBrush(currentColor), StrokeThickness = brushSize },
-                ShapeType.Rectangle => new Rectangle { Stroke = new SolidColorBrush(currentColor), StrokeThickness = brushSize },
-                ShapeType.Ellipse => new Ellipse { Stroke = new SolidColorBrush(currentColor), StrokeThickness = brushSize },
-                _ => null
-            };
-            shape.StrokeDashArray = new DoubleCollection { 2, 2 }; // podgląd
-            return shape;
-        }
-
-
-        private void UpdatePreviewShape(Shape shape, Point start, Point end)
-        {
-            if (shape is Line line)
-            {
-                line.X1 = start.X;
-                line.Y1 = start.Y;
-                line.X2 = end.X;
-                line.Y2 = end.Y;
-            }
-            else
-            {
-                double x = Math.Min(start.X, end.X);
-                double y = Math.Min(start.Y, end.Y);
-                double w = Math.Abs(end.X - start.X);
-                double h = Math.Abs(end.Y - start.Y);
-                Canvas.SetLeft(shape, x);
-                Canvas.SetTop(shape, y);
-                shape.Width = w;
-                shape.Height = h;
-            }
-        }
-
-
-
-        private void DrawPoint(Point point, int size)
+        private void DrawPoint(Point point,int size)
         {
             var wb = ActiveLayer.Bitmap;
             int centerX = (int)point.X;
@@ -538,9 +405,329 @@ namespace PaintApp
                 double t = (double)i / steps;
                 double x = from.X + dx * t;
                 double y = from.Y + dy * t;
-                DrawPoint(new Point(x, y), brushSize);
+                DrawPoint(new Point(x, y),brushSize);
             }
         }
+
+        private Shape CreatePreviewShape(ShapeType type)
+        {
+            Shape shape = type switch
+            {
+                ShapeType.Line => new Line { Stroke = new SolidColorBrush(currentColor), StrokeThickness = brushSize },
+                ShapeType.Rectangle => new Rectangle { Stroke = new SolidColorBrush(currentColor), StrokeThickness = brushSize },
+                ShapeType.Ellipse => new Ellipse { Stroke = new SolidColorBrush(currentColor), StrokeThickness = brushSize },
+                _ => null
+            };
+            shape.StrokeDashArray = new DoubleCollection { 2, 2 }; // podgląd
+            return shape;
+        }
+
+
+        private void UpdatePreviewShape(Shape shape, Point start, Point end)
+        {
+            if (shape is Line line)
+            {
+                line.X1 = start.X;
+                line.Y1 = start.Y;
+                line.X2 = end.X;
+                line.Y2 = end.Y;
+            }
+            else
+            {
+                double x = Math.Min(start.X, end.X);
+                double y = Math.Min(start.Y, end.Y);
+                double w = Math.Abs(end.X - start.X);
+                double h = Math.Abs(end.Y - start.Y);
+                Canvas.SetLeft(shape, x);
+                Canvas.SetTop(shape, y);
+                shape.Width = w;
+                shape.Height = h;
+            }
+        }
+
+
+
+        private void DrawRectangle(WriteableBitmap wb, int x1, int y1, int x2, int y2)
+        {
+            for (int x = x1; x <= x2; x++)
+            {
+             
+                DrawPoint(new Point(x, y1), brushSize);
+                DrawPoint(new Point(x, y2), brushSize);
+            }
+            for (int y = y1; y <= y2; y++)
+            {
+            
+                DrawPoint(new Point(x1, y), brushSize);
+                DrawPoint(new Point(x2, y), brushSize);
+            }
+        }
+
+        private void DrawEllipse(WriteableBitmap wb, int x1, int y1, int x2, int y2)
+        {
+            int centerX = (x1 + x2) / 2;
+            int centerY = (y1 + y2) / 2;
+            int radiusX = (x2 - x1) / 2;
+            int radiusY = (y2 - y1) / 2;
+
+            for (double angle = 0; angle < 360; angle += 0.5)
+            {
+                double rad = angle * Math.PI / 180;
+                int x = (int)(centerX + radiusX * Math.Cos(rad));
+                int y = (int)(centerY + radiusY * Math.Sin(rad));
+                DrawPoint(new Point(x,y), brushSize);
+            }
+        }
+    
+
+        private void Tool_SelectRect_Click(object sender, RoutedEventArgs e)
+        {
+            currentSelectMode = SelectMode.Rectangle;
+            currentTool = ToolType.Select;
+            currentShape = ShapeType.Rectangle;
+            Cursor = Cursors.Cross;
+            // inicjalizacja zaznaczenia
+
+        }
+
+        private void Tool_SelectFree_Click(object sender, RoutedEventArgs e)
+        {
+            currentSelectMode = SelectMode.Free;
+            Cursor = Cursors.Cross;
+            // inicjalizacja dowolnego zaznaczenia
+        }
+
+        private void DrawFinalSelectShape(Shape shape,Point start, Point end)
+        {
+            if(selectedShape != null)
+            {
+                DrawingCanvas.Children.Remove(selectedShape);
+            }
+            selectedShape = shape;
+            shape.StrokeDashArray = new DoubleCollection { 2, 2 };
+            DrawFinalShape(currentShape,start,end);
+            if(currentSelectMode == SelectMode.Rectangle)
+            {
+                selectionRect = new Rect(start,end);
+            }
+            selectedEnd= end;
+            selectedStart= start;
+            //Tu sa punkty start i koniec. Testować czy współrzędne między nimi żeby można było rysować (Przynajmniej dla rect)
+
+        }
+
+        #endregion
+
+
+        private void remove_Select(object sender, RoutedEventArgs e)
+        {
+            selectionRect = new Rect(new Point(0, 0), new Point(canvasWidth, canvasHeight));
+            if (selectedShape != null)
+            {
+                DrawingCanvas.Children.Remove(selectedShape);
+            }
+            invertedSelect = false;
+        }
+
+        private void invert_Select(object sender, RoutedEventArgs e)
+        {
+                invertedSelect = !invertedSelect; 
+            
+        }
+
+       
+
+        private void RedrawCanvas()
+        {
+            DrawingCanvas.Children.Clear();
+            foreach (var layer in Layers)
+            {
+                if (layer.IsVisible)
+                {
+                    DrawingCanvas.Children.Add(layer.ImageControl);
+                }
+               
+            }
+            }
+
+
+        private void Canvas_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (ActiveLayer == null) return;
+            if (e.StylusDevice != null && e.StylusDevice.TabletDevice.Type == TabletDeviceType.Stylus)
+            {
+                StatusLabel.Content = "Tryb: Rysik";
+                currentMode = InputMode.Stylus;
+            }
+            else
+            {
+                StatusLabel.Content = "Tryb: Mysz";
+                currentMode = InputMode.Mouse;
+            }
+
+
+            if (isFillModeEnabled)
+            {
+                FillEntireLayerWithColor();
+                isFillModeEnabled = false;
+                Cursor = Cursors.Arrow;
+                return;
+            }
+
+
+            ActiveLayer.BeginDraw();
+            isDrawing = true;
+
+            shapeStart = e.GetPosition(DrawingCanvas);
+            if (!invertedSelect)
+            {
+                if (currentTool == ToolType.Select || selectionRect.Contains(e.GetPosition(DrawingCanvas))) //Punkt wewnątrz zaznaczenia
+                {
+                    if (currentShape != ShapeType.None)
+                    {
+                        previewShape = CreatePreviewShape(currentShape);
+                        if (previewShape != null)
+                        {
+                            Canvas.SetLeft(previewShape, shapeStart.X);
+                            Canvas.SetTop(previewShape, shapeStart.Y);
+                            DrawingCanvas.Children.Add(previewShape);
+                        }
+                    }
+                    else
+                    {
+                        isDrawing = true;
+                        lastPoint = shapeStart;
+                        DrawPoint(lastPoint.Value, brushSize);
+                    }
+                }
+            }
+            else
+            {
+                if (currentTool == ToolType.Select || !selectionRect.Contains(e.GetPosition(DrawingCanvas))) //Punkt  na zewnątrz zaznaczenia
+                {
+                    if (currentShape != ShapeType.None)
+                    {
+                        previewShape = CreatePreviewShape(currentShape);
+                        if (previewShape != null)
+                        {
+                            Canvas.SetLeft(previewShape, shapeStart.X);
+                            Canvas.SetTop(previewShape, shapeStart.Y);
+                            DrawingCanvas.Children.Add(previewShape);
+                        }
+                    }
+                    else
+                    {
+                        isDrawing = true;
+                        lastPoint = shapeStart;
+                        DrawPoint(lastPoint.Value, brushSize);
+                    }
+                }
+            }
+           
+        }
+
+
+        private void Canvas_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (ActiveLayer == null) return;
+            Point current = e.GetPosition(DrawingCanvas);
+            if (ActiveLayer.IsVisible)
+            {
+                if (!invertedSelect)
+                {
+                    if (currentTool == ToolType.Select || selectionRect.Contains(e.GetPosition(DrawingCanvas))) //Punkt wewnątrz zaznaczenia
+                    {
+                        if (currentShape != ShapeType.None && previewShape != null)
+                        {
+                            UpdatePreviewShape(previewShape, shapeStart, current);
+                        }
+                        else if (isDrawing && lastPoint.HasValue)
+                        {
+                            DrawLine(lastPoint.Value, current);
+                            lastPoint = current;
+                        }
+                    }
+                }
+                else
+                {
+                    if (currentTool == ToolType.Select || !selectionRect.Contains(e.GetPosition(DrawingCanvas))) //Punkt  na zewnątrz zaznaczenia
+                    {
+                        if (currentShape != ShapeType.None && previewShape != null)
+                        {
+                            UpdatePreviewShape(previewShape, shapeStart, current);
+                        }
+                        else if (isDrawing && lastPoint.HasValue)
+                        {
+                            DrawLine(lastPoint.Value, current);
+                            lastPoint = current;
+                        }
+                    }
+                }
+                
+            }
+        }
+
+
+
+
+        private void Canvas_MouseUp(object sender, MouseButtonEventArgs e)
+        {
+            if (ActiveLayer == null) return;
+
+            isDrawing = false;
+            lastPoint = null;
+
+            if (previewShape != null)
+            {
+                if (!invertedSelect)
+                {
+                    if (currentTool == ToolType.Select || selectionRect.Contains(e.GetPosition(DrawingCanvas))) //Punkt wewnątrz zaznaczenia
+                        {
+                            if (currentTool != ToolType.Select)
+                            {
+                                Point end = e.GetPosition(DrawingCanvas);
+                                DrawFinalShape(currentShape, shapeStart, end);
+
+                                DrawingCanvas.Children.Remove(previewShape);
+                                previewShape = null;
+                            }
+                            else
+                            {
+                                Point end = e.GetPosition(DrawingCanvas);
+                                //Rysuj finalny select
+                                DrawFinalSelectShape(previewShape, shapeStart, e.GetPosition(DrawingCanvas));
+                                previewShape = null;
+                                DrawingCanvas.Children.Remove(previewShape);
+                            }
+                        }
+                }
+                else
+                {
+                    if (currentTool == ToolType.Select || !selectionRect.Contains(e.GetPosition(DrawingCanvas))) //Punkt  na zewnątrz zaznaczenia
+                    {
+                        if (currentTool != ToolType.Select)
+                        {
+                            Point end = e.GetPosition(DrawingCanvas);
+                            DrawFinalShape(currentShape, shapeStart, end);
+
+                            DrawingCanvas.Children.Remove(previewShape);
+                            previewShape = null;
+                        }
+                        else
+                        {
+                            Point end = e.GetPosition(DrawingCanvas);
+                            //Rysuj finalny select
+                            DrawFinalSelectShape(previewShape, shapeStart, e.GetPosition(DrawingCanvas));
+                            previewShape = null;
+                            DrawingCanvas.Children.Remove(previewShape);
+                        }
+                    }
+                }
+                
+            }
+        }
+       
+
 
         private void ColorPicker_SelectedColorChanged(object sender, RoutedPropertyChangedEventArgs<Color?> e)
         {
@@ -605,18 +792,11 @@ namespace PaintApp
             CanvasScale.ScaleX *= scale;
             CanvasScale.ScaleY *= scale;
         }
-        private void Tool_SelectRect_Click(object sender, RoutedEventArgs e)
-        {
-            currentSelectMode = SelectMode.Rectangle;
-            Cursor = Cursors.Cross;
-            // inicjalizacja zaznaczenia
-        }
 
-        private void Tool_SelectFree_Click(object sender, RoutedEventArgs e)
+
+        private void SaveImage(string filePath)
         {
-            currentSelectMode = SelectMode.Free;
-            Cursor = Cursors.Cross;
-            // inicjalizacja dowolnego zaznaczenia
+            if (ActiveLayer == null) return;
         }
 
 
@@ -715,61 +895,6 @@ namespace PaintApp
             }
 
             wb.Unlock();
-        }
-
-        private void DrawRectangle(WriteableBitmap wb, int x1, int y1, int x2, int y2)
-        {
-            for (int x = x1; x <= x2; x++)
-            {
-                DrawPixel(wb, x, y1);
-                DrawPixel(wb, x, y2);
-            }
-            for (int y = y1; y <= y2; y++)
-            {
-                DrawPixel(wb, x1, y);
-                DrawPixel(wb, x2, y);
-            }
-        }
-
-        private void DrawEllipse(WriteableBitmap wb, int x1, int y1, int x2, int y2)
-        {
-            int centerX = (x1 + x2) / 2;
-            int centerY = (y1 + y2) / 2;
-            int radiusX = (x2 - x1) / 2;
-            int radiusY = (y2 - y1) / 2;
-
-            for (double angle = 0; angle < 360; angle += 0.5)
-            {
-                double rad = angle * Math.PI / 180;
-                int x = (int)(centerX + radiusX * Math.Cos(rad));
-                int y = (int)(centerY + radiusY * Math.Sin(rad));
-                DrawPixel(wb, x, y);
-            }
-        }
-        private void DrawPixel(WriteableBitmap wb, int x, int y)
-        {
-            if (x < 0 || y < 0 || x >= wb.PixelWidth || y >= wb.PixelHeight)
-                return;
-
-            byte[] colorData;
-
-            if (currentTool == ToolType.Pen)
-            {
-                colorData = new byte[]
-                {
-                    currentColor.B,
-                    currentColor.G,
-                    currentColor.R,
-                    currentColor.A
-                };
-            }
-            else // Eraser
-            {
-                colorData = new byte[] { 0, 0, 0, 0 };
-            }
-
-            var rect = new Int32Rect(x, y, 1, 1);
-            wb.WritePixels(rect, colorData, 4, 0);
         }
 
 

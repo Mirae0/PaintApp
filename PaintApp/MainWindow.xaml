@@ -138,6 +138,10 @@
                 <MenuItem Header="Ponów" Click="Redo_Click" InputGestureText="Ctrl+Y" />
             </MenuItem>
             
+            <MenuItem Header="Zaznaczenie">
+                <MenuItem Header="Usuń zaznaczenie" Click="remove_Select"/>
+                <MenuItem Header="Odwróć zaznaczenie" Click="invert_Select"/>
+            </MenuItem>
         </Menu>
      
         <!-- GŁÓWNY UKŁAD -->
