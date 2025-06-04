@@ -28,6 +28,10 @@
                 <MenuItem Header="Otwórz" Click="Open_Click"/>
                 <MenuItem Header="Zamknij" Click="Close_Click"/>
             </MenuItem>
+            <MenuItem Header="Zaznaczenie">
+                <MenuItem Header="Usuń zaznaczenie" Click="remove_Select"/>
+                <MenuItem Header="Odwróć zaznaczenie" Click="invert_Select"/>
+            </MenuItem>
         </Menu>
 
         <!-- GŁÓWNY UKŁAD -->

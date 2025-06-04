@@ -44,6 +44,7 @@ namespace PaintApp
         private ShapeType currentShape = ShapeType.None;
         private enum SelectMode { None, Rectangle, Free }
         private SelectMode currentSelectMode = SelectMode.None;
+        private bool invertedSelect;
         private Shape? previewShape = null;
         private Shape? selectedShape = null;
         private Point shapeStart;
@@ -267,7 +268,13 @@ namespace PaintApp
 
         #endregion
 
+      
         #region Layers
+
+        //Usunięcie zaznaczenia
+
+        
+
         private void AddLayer_Click(object sender, RoutedEventArgs e)
         {
             ContextMenu contextMenu = (ContextMenu)Resources["LayerMenu"];
@@ -370,6 +377,22 @@ namespace PaintApp
         #endregion
 
 
+        private void remove_Select(object sender, RoutedEventArgs e)
+        {
+            selectionRect = new Rect(new Point(0, 0), new Point(canvasWidth, canvasHeight));
+            if (selectedShape != null)
+            {
+                DrawingCanvas.Children.Remove(selectedShape);
+            }
+            invertedSelect = false;
+        }
+
+        private void invert_Select(object sender, RoutedEventArgs e)
+        {
+                invertedSelect = !invertedSelect; 
+            
+        }
+
         private void SetToolToPen(object sender, RoutedEventArgs e)
         {
             currentTool = ToolType.Pen;
@@ -403,25 +426,51 @@ namespace PaintApp
             if (ActiveLayer == null) return;
 
             shapeStart = e.GetPosition(DrawingCanvas);
-            if (currentTool == ToolType.Select || selectionRect.Contains(shapeStart)) //Punkt wewnątrz zaznaczenia
+            if (!invertedSelect)
             {
-                if (currentShape != ShapeType.None)
+                if (currentTool == ToolType.Select || selectionRect.Contains(e.GetPosition(DrawingCanvas))) //Punkt wewnątrz zaznaczenia
                 {
-                    previewShape = CreatePreviewShape(currentShape);
-                    if (previewShape != null)
+                    if (currentShape != ShapeType.None)
                     {
-                        Canvas.SetLeft(previewShape, shapeStart.X);
-                        Canvas.SetTop(previewShape, shapeStart.Y);
-                        DrawingCanvas.Children.Add(previewShape);
+                        previewShape = CreatePreviewShape(currentShape);
+                        if (previewShape != null)
+                        {
+                            Canvas.SetLeft(previewShape, shapeStart.X);
+                            Canvas.SetTop(previewShape, shapeStart.Y);
+                            DrawingCanvas.Children.Add(previewShape);
+                        }
+                    }
+                    else
+                    {
+                        isDrawing = true;
+                        lastPoint = shapeStart;
+                        DrawPoint(lastPoint.Value);
                     }
                 }
-                else
+            }
+            else
+            {
+                if (currentTool == ToolType.Select || !selectionRect.Contains(e.GetPosition(DrawingCanvas))) //Punkt  na zewnątrz zaznaczenia
                 {
-                    isDrawing = true;
-                    lastPoint = shapeStart;
-                    DrawPoint(lastPoint.Value);
+                    if (currentShape != ShapeType.None)
+                    {
+                        previewShape = CreatePreviewShape(currentShape);
+                        if (previewShape != null)
+                        {
+                            Canvas.SetLeft(previewShape, shapeStart.X);
+                            Canvas.SetTop(previewShape, shapeStart.Y);
+                            DrawingCanvas.Children.Add(previewShape);
+                        }
+                    }
+                    else
+                    {
+                        isDrawing = true;
+                        lastPoint = shapeStart;
+                        DrawPoint(lastPoint.Value);
+                    }
                 }
             }
+           
         }
 
 
@@ -431,16 +480,34 @@ namespace PaintApp
             Point current = e.GetPosition(DrawingCanvas);
             if (ActiveLayer.IsVisible)
             {
-                if (currentTool == ToolType.Select || selectionRect.Contains(current)) //Punkt wewnątrz zaznaczenia
+                if (!invertedSelect)
                 {
-                    if (currentShape != ShapeType.None && previewShape != null)
+                    if (currentTool == ToolType.Select || selectionRect.Contains(e.GetPosition(DrawingCanvas))) //Punkt wewnątrz zaznaczenia
                     {
-                        UpdatePreviewShape(previewShape, shapeStart, current);
+                        if (currentShape != ShapeType.None && previewShape != null)
+                        {
+                            UpdatePreviewShape(previewShape, shapeStart, current);
+                        }
+                        else if (isDrawing && lastPoint.HasValue)
+                        {
+                            DrawLine(lastPoint.Value, current);
+                            lastPoint = current;
+                        }
                     }
-                    else if (isDrawing && lastPoint.HasValue)
+                }
+                else
+                {
+                    if (currentTool == ToolType.Select || !selectionRect.Contains(e.GetPosition(DrawingCanvas))) //Punkt  na zewnątrz zaznaczenia
                     {
-                        DrawLine(lastPoint.Value, current);
-                        lastPoint = current;
+                        if (currentShape != ShapeType.None && previewShape != null)
+                        {
+                            UpdatePreviewShape(previewShape, shapeStart, current);
+                        }
+                        else if (isDrawing && lastPoint.HasValue)
+                        {
+                            DrawLine(lastPoint.Value, current);
+                            lastPoint = current;
+                        }
                     }
                 }
                 
@@ -457,25 +524,51 @@ namespace PaintApp
 
             if (previewShape != null)
             {
-                if (currentTool == ToolType.Select || selectionRect.Contains(e.GetPosition(DrawingCanvas))) //Punkt wewnątrz zaznaczenia
+                if (!invertedSelect)
                 {
-                    if (currentTool != ToolType.Select)
-                    {
-                        Point end = e.GetPosition(DrawingCanvas);
-                        DrawFinalShape(currentShape, shapeStart, end);
+                    if (currentTool == ToolType.Select || selectionRect.Contains(e.GetPosition(DrawingCanvas))) //Punkt wewnątrz zaznaczenia
+                        {
+                            if (currentTool != ToolType.Select)
+                            {
+                                Point end = e.GetPosition(DrawingCanvas);
+                                DrawFinalShape(currentShape, shapeStart, end);
 
-                        DrawingCanvas.Children.Remove(previewShape);
-                        previewShape = null;
-                    }
-                    else
+                                DrawingCanvas.Children.Remove(previewShape);
+                                previewShape = null;
+                            }
+                            else
+                            {
+                                Point end = e.GetPosition(DrawingCanvas);
+                                //Rysuj finalny select
+                                DrawFinalSelectShape(previewShape, shapeStart, e.GetPosition(DrawingCanvas));
+                                previewShape = null;
+                                DrawingCanvas.Children.Remove(previewShape);
+                            }
+                        }
+                }
+                else
+                {
+                    if (currentTool == ToolType.Select || !selectionRect.Contains(e.GetPosition(DrawingCanvas))) //Punkt  na zewnątrz zaznaczenia
                     {
-                        Point end = e.GetPosition(DrawingCanvas);
-                        //Rysuj finalny select
-                        DrawFinalSelectShape(previewShape, shapeStart, e.GetPosition(DrawingCanvas));
-                        previewShape = null;
-                        DrawingCanvas.Children.Remove(previewShape);
+                        if (currentTool != ToolType.Select)
+                        {
+                            Point end = e.GetPosition(DrawingCanvas);
+                            DrawFinalShape(currentShape, shapeStart, end);
+
+                            DrawingCanvas.Children.Remove(previewShape);
+                            previewShape = null;
+                        }
+                        else
+                        {
+                            Point end = e.GetPosition(DrawingCanvas);
+                            //Rysuj finalny select
+                            DrawFinalSelectShape(previewShape, shapeStart, e.GetPosition(DrawingCanvas));
+                            previewShape = null;
+                            DrawingCanvas.Children.Remove(previewShape);
+                        }
                     }
                 }
+                
             }
         }
        
