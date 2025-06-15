@@ -47,6 +47,9 @@ namespace PaintApp
             DrawingCanvas.Width = canvasWidth;
             DrawingCanvas.Height = canvasHeight;
             SetTheme(theme);
+            this.CommandBindings.Add(new CommandBinding(ApplicationCommands.Save, SaveCommand_Executed));
+            this.InputBindings.Add(new KeyBinding(ApplicationCommands.Save, Key.S, ModifierKeys.Control));
+
 
 
         }
@@ -80,6 +83,7 @@ namespace PaintApp
         public ICommand RedoCommand { get; set; }
         private enum InputMode { None, Mouse, Stylus }
         private InputMode currentMode = InputMode.None;
+        private bool isSaved = false;
 
 
         private bool CanUndo() => ActiveLayer != null && ActiveLayer.CanUndo();
@@ -794,10 +798,7 @@ namespace PaintApp
         }
 
 
-        private void SaveImage(string filePath)
-        {
-            if (ActiveLayer == null) return;
-        }
+       
 
 
         private void SaveAsPng_Click(object sender, RoutedEventArgs e)
@@ -911,8 +912,18 @@ namespace PaintApp
 
         private void Save_Click(object sender, RoutedEventArgs e)
         {
-            SaveAsPng_Click(sender, e);
+            //zapis stanu pracy w pamięci
+            isSaved = true;
+
+            
+            StatusLabel.Content = "Zapisano.";
+            
         }
+        private void SaveCommand_Executed(object sender, ExecutedRoutedEventArgs e)
+        {
+            Save_Click(sender, e);
+        }
+
         private void Open_Click(object sender, RoutedEventArgs e)
         {
             OpenFileDialog dlg = new OpenFileDialog
@@ -924,10 +935,9 @@ namespace PaintApp
 
             if (dlg.ShowDialog() == true)
             {
-
                 BitmapImage bitmap = new BitmapImage(new Uri(dlg.FileName));
 
-
+                // warstwa z obrazem
                 var layer = new DrawingLayer(bitmap.PixelWidth, bitmap.PixelHeight)
                 {
                     Name = $"Warstwa {Layers.Count + 1}"
@@ -936,17 +946,73 @@ namespace PaintApp
                 layer.Bitmap = new WriteableBitmap(bitmap);
                 layer.ImageControl.Source = layer.Bitmap;
 
+                // kontener dla obrazu z obramowaniem (border)
+                Border imageContainer = new Border
+                {
+                    Child = layer.ImageControl,
+                    BorderThickness = new Thickness(1),
+                    BorderBrush = Brushes.Gray
+                };
+
+                // dodanie kontener na Canvas
+                Canvas.SetLeft(imageContainer, 0);
+                Canvas.SetTop(imageContainer, 0);
+                DrawingCanvas.Children.Insert(0, imageContainer);
 
                 Layers.Insert(0, layer);
-                DrawingCanvas.Children.Insert(0, layer.ImageControl);
-
-                Canvas.SetLeft(layer.ImageControl, 0);
-                Canvas.SetTop(layer.ImageControl, 0);
-
-
+                layer.ImageControl.Tag = imageContainer;
                 LayerList.SelectedItem = layer;
+
+                // przesuwanie
+                Point? dragStart = null;
+                imageContainer.MouseLeftButtonDown += (s, ev) =>
+                {
+                    dragStart = ev.GetPosition(DrawingCanvas);
+                    imageContainer.CaptureMouse();
+                };
+
+                imageContainer.MouseLeftButtonUp += (s, ev) =>
+                {
+                    dragStart = null;
+                    imageContainer.ReleaseMouseCapture();
+                };
+
+                imageContainer.MouseMove += (s, ev) =>
+                {
+                    if (dragStart.HasValue)
+                    {
+                        Point current = ev.GetPosition(DrawingCanvas);
+                        double offsetX = current.X - dragStart.Value.X;
+                        double offsetY = current.Y - dragStart.Value.Y;
+
+                        double left = Canvas.GetLeft(imageContainer);
+                        double top = Canvas.GetTop(imageContainer);
+
+                        Canvas.SetLeft(imageContainer, left + offsetX);
+                        Canvas.SetTop(imageContainer, top + offsetY);
+
+                        dragStart = current;
+                    }
+                };
+
+                // ResizeAdorner do skalowania
+                var adornerLayer = AdornerLayer.GetAdornerLayer(layer.ImageControl);
+                var resizeAdorner = new ResizeAdorner(layer.ImageControl);
+
+                // po puszceniu thumb (tego co skaluje) konczy sie edycja i usuwa adorner
+                resizeAdorner.BottomRight.DragCompleted += (s, ev) =>
+                {
+                    adornerLayer.Remove(resizeAdorner);
+                    imageContainer.BorderThickness = new Thickness(0);
+                };
+
+                // dodaje adorner i pokauje obramowanie
+                adornerLayer.Add(resizeAdorner);
+                imageContainer.BorderThickness = new Thickness(1);
+                imageContainer.BorderBrush = Brushes.Gray;
             }
         }
+
 
         private void DrawingCanvas_MouseWheel(object sender, MouseWheelEventArgs e)
         {

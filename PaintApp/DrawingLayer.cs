@@ -1,12 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Media.Imaging;
+﻿using System.Windows.Media.Imaging;
 using System.Windows.Controls;
 using System.Windows.Media;
-using System.Windows.Media.Media3D;
 using System.Windows;
 
 namespace PaintApp
@@ -19,7 +13,9 @@ namespace PaintApp
         public string Name { get; set; }
         public bool IsVisible { get; set; } = true;
         public double Opacity { get; set; }
-      
+        public UIElement Container { get; set; }
+
+
 
         private Stack<WriteableBitmap> undoStack = new Stack<WriteableBitmap>();
         private Stack<WriteableBitmap> redoStack = new Stack<WriteableBitmap>();
