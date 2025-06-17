@@ -527,7 +527,7 @@ namespace PaintApp
             //Tu sa punkty start i koniec. Testować czy współrzędne między nimi żeby można było rysować (Przynajmniej dla rect)
 
         }
-
+        /*
         private void FillShape(Point start)
         {
             System.Drawing.Bitmap bmp;
@@ -584,14 +584,14 @@ namespace PaintApp
                     }
                 }
             }
-
+            
           
            BitmapSource bitmapSource =  System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(bmp.GetHbitmap(), IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
            WriteableBitmap wbtm = new WriteableBitmap(bitmapSource);
 
             ActiveLayer.Bitmap = wbtm;
         }
-
+        */
         #endregion
 
 
@@ -657,7 +657,7 @@ namespace PaintApp
 
             if (currentTool == ToolType.Bucket)
             {
-                FillShape(e.GetPosition(DrawingCanvas));
+               // FillShape(e.GetPosition(DrawingCanvas));
             }
 
 
