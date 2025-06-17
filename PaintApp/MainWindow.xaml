@@ -156,7 +156,8 @@
                 <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" Margin="10">
                     <StackPanel>
                         <Button Content="Dodaj Warstwę" Click="AddLayer_Click" Margin="0,5"/>
-                        <Button Content="W górę" Click="MoveLayerUp_Click" Margin="0,5"/>
+                    <Button Content="Wiaderko" Click="Tool_SelectBucket_Click"/>
+                    <Button Content="W górę" Click="MoveLayerUp_Click" Margin="0,5"/>
                         <Button Content="W dół" Click="MoveLayerDown_Click" Margin="0,5"/>
                         <ListBox x:Name="LayerList" Background="LightGray"
                              SelectionChanged="LayerList_SelectionChanged"

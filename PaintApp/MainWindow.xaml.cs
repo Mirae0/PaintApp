@@ -16,6 +16,7 @@ using Xceed.Wpf.Toolkit.PropertyGrid.Attributes;
 using System.Windows.Input.StylusPlugIns;
 using Xceed.Wpf.Themes.FluentDesign.Common;
 using System.DirectoryServices;
+using System.Diagnostics;
 
 
 namespace PaintApp
@@ -63,7 +64,7 @@ namespace PaintApp
 
         const int canvasWidth = 800;
         const int canvasHeight = 600;
-        private enum ToolType { Pen, Eraser, Select }
+        private enum ToolType { Pen, Eraser, Select, Bucket }
         private ToolType currentTool = ToolType.Pen;
         private Color currentColor = Colors.Black;
         private int brushSize = 1;
@@ -358,7 +359,7 @@ namespace PaintApp
 
             byte[] colorData;
 
-            if (currentTool == ToolType.Pen)
+            if (currentTool == ToolType.Pen || currentTool == ToolType.Bucket)
             {
                 colorData = new byte[]
                 {
@@ -501,6 +502,13 @@ namespace PaintApp
             // inicjalizacja dowolnego zaznaczenia
         }
 
+        private void Tool_SelectBucket_Click(object sender, RoutedEventArgs e)
+        {
+            currentShape = ShapeType.None;
+            currentTool = ToolType.Bucket;
+            Cursor = Cursors.Cross;
+        }
+
         private void DrawFinalSelectShape(Shape shape,Point start, Point end)
         {
             if(selectedShape != null)
@@ -518,6 +526,70 @@ namespace PaintApp
             selectedStart= start;
             //Tu sa punkty start i koniec. Testować czy współrzędne między nimi żeby można było rysować (Przynajmniej dla rect)
 
+        }
+
+        private void FillShape(Point start)
+        {
+            System.Drawing.Bitmap bmp;
+            using (MemoryStream outStream = new MemoryStream())
+            {
+                BitmapEncoder enc = new BmpBitmapEncoder();
+                enc.Frames.Add(BitmapFrame.Create((BitmapSource) ActiveLayer.Bitmap));
+                enc.Save(outStream);
+                bmp = new System.Drawing.Bitmap(outStream);
+            }
+
+
+            Stack<Point> points = new Stack<Point>();
+            System.Drawing.Color colTemp =bmp.GetPixel((int)start.X, (int)start.Y);
+            Color targetColor = Color.FromArgb(colTemp.A,colTemp.R, colTemp.G, colTemp.B);
+            System.Drawing.Color colNew = System.Drawing.Color.FromArgb(currentColor.A,currentColor.R,currentColor.G,currentColor.B);
+
+            if (!colTemp.Equals(colNew))
+            {
+                points.Push(start);
+
+                while (points.Count > 0)
+                {
+                    Point temp = points.Pop();
+                    if (temp.X < bmp.Width && temp.X > 0 && temp.Y < bmp.Height && temp.Y > 0)
+                    {
+                        if (bmp.GetPixel((int)temp.X, (int)temp.Y) == colTemp)
+                        {
+                            DrawPoint(temp,10);
+                            //bmp.SetPixel((int)temp.X, (int)temp.Y, colNew);
+                            Point newP = new Point(temp.X+1, temp.Y);
+                            if (colTemp.Equals(bmp.GetPixel((int)newP.X, (int)newP.Y)) && newP.X < bmp.Width && newP.X > 0 && newP.Y < bmp.Height && newP.Y > 0)
+                            {
+                                points.Push(newP);
+                            }
+                            newP = new Point((int)temp.X - 1, (int)temp.Y);
+                            if (colTemp.Equals(bmp.GetPixel((int)newP.X, (int)newP.Y)) && newP.X < bmp.Width && newP.X > 0 && newP.Y < bmp.Height && newP.Y > 0)
+                            {
+                                points.Push(newP);
+                            }
+                             newP = new Point((int)temp.X, (int)temp.Y + 1);
+                            if (colTemp.Equals(bmp.GetPixel((int)newP.X, (int)newP.Y)) && newP.X < bmp.Width && newP.X > 0 && newP.Y < bmp.Height && newP.Y > 0)
+                            {
+                                points.Push(newP);
+                            }
+                             newP = new Point((int)temp.X, (int)temp.Y - 1);
+                            if (colTemp.Equals(bmp.GetPixel((int)newP.X, (int)newP.Y)) && newP.X < bmp.Width && newP.X > 0 && newP.Y < bmp.Height && newP.Y > 0)
+                            {
+                                points.Push(newP);
+                            }
+
+                            Trace.WriteLine(points.Pop());
+                        }
+                    }
+                }
+            }
+
+          
+           BitmapSource bitmapSource =  System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(bmp.GetHbitmap(), IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+           WriteableBitmap wbtm = new WriteableBitmap(bitmapSource);
+
+            ActiveLayer.Bitmap = wbtm;
         }
 
         #endregion
@@ -581,6 +653,13 @@ namespace PaintApp
 
             ActiveLayer.BeginDraw();
             isDrawing = true;
+
+
+            if (currentTool == ToolType.Bucket)
+            {
+                FillShape(e.GetPosition(DrawingCanvas));
+            }
+
 
             shapeStart = e.GetPosition(DrawingCanvas);
             if (!invertedSelect)
